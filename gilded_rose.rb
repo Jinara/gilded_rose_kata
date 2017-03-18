@@ -14,7 +14,8 @@ class ItemUpdater
       :s_menor_0 => (item.sell_in < 0),
       :q_mayor_0 => (item.quality > 0),
       :s_menor_11 => (item.sell_in < 11),
-      :s_mayor_o_igual_0 => ((item.sell_in >= 0) ? "especial_case" : false),
+      :s_menor_6 => (item.sell_in < 6),
+      :s_mayor_o_igual_0 => ((item.sell_in >= 0) ? false : "special_case"),
     }
     evaluator(conditions[sym], item, &block)
   end
@@ -35,18 +36,12 @@ class BackstagePassesUpdater < ItemUpdater
   end
 
   def update_quality(item)
-    if item.quality < 50 
+    operations(item, :q_menor_50) do
       item.quality +=1
-      if item.sell_in < 11
-        if item.quality < 50
-          item.quality +=1
-        end
+      operations(item, :s_menor_11) do
+        operations(item, :q_menor_50)
       end
-
-    # operations(item, :s_menor_11) do
-    #   operations(item, :q_menor_50)
-    # end
-      if item.sell_in < 6
+      operations(item, :s_menor_6) do
         operations(item, :q_menor_50)
       end
     end
@@ -57,7 +52,7 @@ class BackstagePassesUpdater < ItemUpdater
   def evaluator(condition, item, &block)
     evaluators = {
       "true" => lambda { true_value(item, &block) },
-      "false" => lambda { false_value(item, &block) }
+      "special_case" => lambda { special_case_value(item, &block) }
     }
     evaluators.default = lambda { nil }
     evaluators[condition.to_s].call
@@ -67,7 +62,7 @@ class BackstagePassesUpdater < ItemUpdater
     block_given? ? yield : (item.quality += 1)
   end
 
-  def false_value(item, &block)
+  def special_case_value(item, &block)
     block_given? ? yield : (item.quality = 0)
   end
 end
