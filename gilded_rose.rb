@@ -1,16 +1,37 @@
-class QualityUpdater
-  def update_item(item)
-    updaters = {
-      "Backstage passes to a TAFKAL80ETC concert" => lambda { BackstagePassesUpdater.new.update_quality(item) },
-      "Aged Brie" => lambda { AgedBrieUpdater.new.update_quality(item) },
-      "Sulfuras, Hand of Ragnaros" => lambda { SulfurasUpdater.new.update_quality(item) },
-    }
-    updaters.default = lambda { DafaultUpdater.new.update_quality(item) }
-    updaters[item.name].call
+class ItemUpdater
+
+  def initialize(item_type)
+    @item_type = Object.const_get(item_type, Class.new)
   end
+
+  def update_item(item)
+    @item_type.new.update_quality(item)
+  end
+
+  def operations(item, sym, &block)
+    conditions = {
+      :q_menor_50 => (item.quality < 50),
+      :s_menor_0 => (item.sell_in < 0),
+      :q_mayor_0 => (item.quality > 0)
+    }
+    evaluator(conditions[sym], item, &block)
+  end
+
+  def evaluator(condition, item, &block)
+    evaluators = {
+      "true" => lambda { true_value(item, &block) }
+    }
+    evaluators.default = lambda { nil }
+    evaluators[condition.to_s].call
+  end
+
 end
 
-class BackstagePassesUpdater
+class BackstagePassesUpdater < ItemUpdater
+
+  def initialize
+  end
+
   def update_quality(item)
     if item.quality < 50 
       item.quality +=1
@@ -26,21 +47,23 @@ class BackstagePassesUpdater
       end
     end
     item.sell_in -= 1
-    if item.sell_in < 0
-      item.quality = 0
-    end
+    operations(item, :s_menor_0)
+  end
+
+  def true_value(item, &block)
+    block_given? ? yield : (item.quality = 0)
+  end
+
+  def false_value(item, &block)
+    block_given? ? yield : (item.quality = 0)
   end
 end
 
-def operations(item, sym, &block)
-  conditions = {
-    :q_menor_50 => (item.quality < 50),
-    :s_menor_0 => (item.sell_in < 0)
-  }
-  AgedBrieUpdater.new.evaluator(conditions[sym], item, &block)
-end
+class AgedBrieUpdater < ItemUpdater
 
-class AgedBrieUpdater
+  def initialize
+  end
+
   def update_quality(item)
     operations(item, :q_menor_50)
 
@@ -51,12 +74,18 @@ class AgedBrieUpdater
     end
   end
 
-  def evaluator(condition, item, &block)
-    evaluators = {
-      "true" => lambda { true_value(item, &block) }
-    }
-    evaluators.default = lambda { nil }
-    evaluators[condition.to_s].call
+  def true_value(item, &block)
+    block_given? ? yield : (item.quality += 1)
+  end
+end
+
+class SulfurasUpdater < ItemUpdater
+
+  def initialize
+  end
+
+  def update_quality(item)
+    operations(item, :q_menor_50)
   end
 
   def true_value(item, &block)
@@ -64,76 +93,40 @@ class AgedBrieUpdater
   end
 end
 
-class SulfurasUpdater
+class DefaultUpdater < ItemUpdater
+
+  def initialize
+  end
+
   def update_quality(item)
-    if item.quality < 50
-      item.quality += 1
+    operations(item, :q_mayor_0)
+    item.sell_in -= 1
+    operations(item, :s_menor_0) do
+      operations(item, :q_mayor_0)
     end
+  end
+
+  def true_value(item, &block)
+    block_given? ? yield : (item.quality -= 1)
   end
 end
 
-class DafaultUpdater
-  def update_quality(item)
-    if item.quality > 0
-      item.quality -= 1
-    end
-    item.sell_in -= 1
-    if item.sell_in < 0
-      if item.quality > 0
-        item.quality -= 1
-      end
-    end
+class QualityUpdater
+
+  def update_item_quality(item)
+    updaters = {
+      "Backstage passes to a TAFKAL80ETC concert" => lambda { ItemUpdater.new("BackstagePassesUpdater").update_item(item) },
+      "Aged Brie" => lambda { ItemUpdater.new("AgedBrieUpdater").update_item(item) },
+      "Sulfuras, Hand of Ragnaros" => lambda { ItemUpdater.new("SulfurasUpdater").update_item(item) },
+    }
+    updaters.default = lambda { ItemUpdater.new("DefaultUpdater").update_item(item) }
+    updaters[item.name].call
   end
 end
-def second_evaluation(item)
-  if item.name != 'Aged Brie' && item.name != 'Backstage passes to a TAFKAL80ETC concert'
-    if item.quality > 0
-      if item.name != 'Sulfuras, Hand of Ragnaros'
-        item.quality -= 1
-      end
-    end
-  else
-    if item.quality < 50
-      item.quality += 1
-      if item.name == 'Backstage passes to a TAFKAL80ETC concert'
-        if item.sell_in < 11
-          if item.quality < 50
-            item.quality += 1
-          end
-        end
-        if item.sell_in < 6
-          if item.quality < 50
-            item.quality += 1
-          end
-        end
-      end
-    end
-  end
-  if item.name != 'Sulfuras, Hand of Ragnaros'
-    item.sell_in -= 1
-  end
-  if item.sell_in < 0
-    if item.name != "Aged Brie"
-      if item.name != 'Backstage passes to a TAFKAL80ETC concert'
-        if item.quality > 0
-          if item.name != 'Sulfuras, Hand of Ragnaros'
-            item.quality -= 1
-          end
-        end
-      else
-        item.quality = item.quality - item.quality
-      end
-    else
-      if item.quality < 50
-        item.quality += 1
-      end
-    end
-  end
-end
+
 def update_quality(items)
   items.each do |item|
-    QualityUpdater.new.update_item(item)
-    #second_evaluation(item)
+    QualityUpdater.new.update_item_quality(item)
   end
 end
 
