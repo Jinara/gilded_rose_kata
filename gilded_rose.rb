@@ -8,11 +8,6 @@ class QualityUpdater
     updaters.default = lambda { DafaultUpdater.new.update_quality(item) }
     updaters[item.name].call
   end
-
-  def mientras(item, sym)
-    operator = {:menor_50 => -1}
-    item.quality + operator[sym]
-  end
 end
 
 class BackstagePassesUpdater
@@ -37,17 +32,35 @@ class BackstagePassesUpdater
   end
 end
 
+def operations(item, sym, &block)
+  conditions = {
+    :q_menor_50 => (item.quality < 50),
+    :s_menor_0 => (item.sell_in < 0)
+  }
+  AgedBrieUpdater.new.evaluator(conditions[sym], item, &block)
+end
+
 class AgedBrieUpdater
   def update_quality(item)
-    if item.quality < 50 
-      item.quality +=1
-    end
+    operations(item, :q_menor_50)
+
     item.sell_in -= 1
-    if item.sell_in < 0
-      if item.quality < 50
-        item.quality +=1
-      end
+
+    operations(item, :s_menor_0) do
+      operations(item, :q_menor_50)
     end
+  end
+
+  def evaluator(condition, item, &block)
+    evaluators = {
+      "true" => lambda { true_value(item, &block) }
+    }
+    evaluators.default = lambda { nil }
+    evaluators[condition.to_s].call
+  end
+
+  def true_value(item, &block)
+    block_given? ? yield : (item.quality += 1)
   end
 end
 
